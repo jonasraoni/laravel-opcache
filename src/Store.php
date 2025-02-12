@@ -2,14 +2,16 @@
 
 namespace ElcoBvg\Opcache;
 
+use Illuminate\Cache\FileLock;
 use Illuminate\Support\Str;
 use Illuminate\Cache\TagSet;
 use Illuminate\Cache\TaggableStore;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Cache\Store as StoreContract;
 use Illuminate\Cache\RetrievesMultipleKeys;
+use Illuminate\Contracts\Cache\LockProvider;
 
-class Store extends TaggableStore implements StoreContract
+class Store extends TaggableStore implements StoreContract, LockProvider
 {
     use RetrievesMultipleKeys;
 
@@ -42,6 +44,13 @@ class Store extends TaggableStore implements StoreContract
     protected $enabled = false;
 
     /**
+     * The file cache lock directory.
+     *
+     * @var string|null
+     */
+    protected $lockDirectory;
+
+    /**
      * Create a new OPcache store.
      *
      * @param  string    $prefix
@@ -63,7 +72,7 @@ class Store extends TaggableStore implements StoreContract
          */
         $this->directory = $directory ?: config('cache.stores.opcache.path', config('cache.stores.file.path'));
     }
-    
+
     /**
      * Begin executing a new tags operation.
      *
@@ -400,5 +409,51 @@ class Store extends TaggableStore implements StoreContract
             return $this->writeFile($key, $extended, var_export($val, true));
         }
         return false;
+    }
+
+    /**
+     * Get a lock instance.
+     *
+     * @param  string  $name
+     * @param  int  $seconds
+     * @param  string|null  $owner
+     * @return \Illuminate\Contracts\Cache\Lock
+     */
+    public function lock($name, $seconds = 0, $owner = null)
+    {
+        $directory = $this->lockDirectory ?? $this->directory;
+        $this->checkDirectory($directory);
+
+        return new FileLock(
+            new static($this->prefix, $directory),
+            $name,
+            $seconds,
+            $owner
+        );
+    }
+
+    /**
+     * Restore a lock instance using the owner identifier.
+     *
+     * @param  string  $name
+     * @param  string  $owner
+     * @return \Illuminate\Contracts\Cache\Lock
+     */
+    public function restoreLock($name, $owner)
+    {
+        return $this->lock($name, 0, $owner);
+    }
+
+    /**
+     * Set the cache directory where locks should be stored.
+     *
+     * @param  string|null  $lockDirectory
+     * @return $this
+     */
+    public function setLockDirectory($lockDirectory)
+    {
+        $this->lockDirectory = $lockDirectory;
+
+        return $this;
     }
 }
