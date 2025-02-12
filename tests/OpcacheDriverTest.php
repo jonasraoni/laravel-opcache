@@ -195,6 +195,42 @@ class OpcacheDriverTest extends TestCase
         $this->testStoreRemember();
     }
 
+    public function testStoreLock()
+    {
+        $store = $this->getStore();
+        $lock = $store->lock('test-lock', 10);
+
+        $this->assertInstanceOf(\Illuminate\Cache\FileLock::class, $lock);
+        $this->assertTrue($lock->acquire());
+        $this->assertTrue($lock->release());
+    }
+
+    public function testStoreRestoreLock()
+    {
+        $store = $this->getStore();
+        $lock = $store->lock('test-lock', 10);
+
+        $owner = $lock->owner();
+        $this->assertTrue($lock->acquire());
+
+        $restoredLock = $store->restoreLock('test-lock', $owner);
+        $this->assertInstanceOf(\Illuminate\Cache\FileLock::class, $restoredLock);
+        $this->assertTrue($restoredLock->release());
+    }
+
+    public function testStoreLockDirectory()
+    {
+        $store = $this->getStore();
+        $customLockPath = sys_get_temp_dir() . '/opcache-locks';
+
+        $store->setLockDirectory($customLockPath);
+        $lock = $store->lock('test-lock', 10);
+
+        $this->assertTrue($lock->acquire());
+        $this->assertTrue(file_exists($customLockPath));
+        $this->assertTrue($lock->release());
+    }
+
     protected function getStore()
     {
         return new Store('opcache', sys_get_temp_dir());
